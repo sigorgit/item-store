@@ -9,6 +9,7 @@ contract ItemStore is Ownable {
 
     IInjeolmi public ijm;
     address public feeTo;
+    mapping(bytes32 => bool) public isPurchased;
 
     constructor(IInjeolmi _ijm, address _feeTo) public {
         ijm = _ijm;
@@ -24,30 +25,25 @@ contract ItemStore is Ownable {
 
     function setPrices(uint256[] calldata ids, uint256[] calldata prices) onlyOwner external {
         require(ids.length == prices.length);
-        for (uint256 i = 0; i < ids.length; i = i.add(1)) {
+        for (uint256 i = 0; i < ids.length; i++) {
             itemPrices[ids[i]] = prices[i];
         }
     }
 
-    function buyItem(bytes32 hash, uint256 itemId) external {
-        require(hash == keccak256(abi.encodePacked(msg.sender, nonces[msg.sender], itemId)));
-        nonces[msg.sender] = nonces[msg.sender].add(1);
-        uint256 price = itemPrices[itemId];
-        ijm.transferFrom(msg.sender, owner(), price.div(10));
-        ijm.transferFrom(msg.sender, feeTo, price.mul(9).div(10));
-    }
-
-    function buyItems(bytes32[] calldata hashes, uint256[] calldata itemIds) external {
-        require(hashes.length == itemIds.length);
+    function buyItems(uint256[] calldata itemIds) external {
         uint256 nonce = nonces[msg.sender];
-        uint256 price;
-        for (uint256 i = 0; i < hashes.length; i = i.add(1)) {
-            require(hashes[i] == keccak256(abi.encodePacked(msg.sender, nonce, itemIds[i])));
-            nonce = nonce.add(1);
-            price = price.add(itemPrices[itemIds[i]]);
+        uint256 totalPrice;
+        for (uint256 i = 0; i < itemIds.length; i++) {
+            bytes32 hash = keccak256(abi.encodePacked(msg.sender, nonce++, itemIds[i]));
+            isPurchased[hash] = true;
+
+            totalPrice = totalPrice.add(itemPrices[itemIds[i]]);
         }
         nonces[msg.sender] = nonce;
-        ijm.transferFrom(msg.sender, owner(), price.div(10));
-        ijm.transferFrom(msg.sender, feeTo, price.mul(9).div(10));
+
+        uint256 priceToOwner = totalPrice.div(10);
+
+        ijm.transferFrom(msg.sender, owner(), priceToOwner);
+        ijm.transferFrom(msg.sender, feeTo, totalPrice.sub(priceToOwner));
     }
 }
